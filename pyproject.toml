@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "set-cli"
+version = "0.1.0"
+description = "Set, messing up with Osiride"
+authors = ["John Doe <giuseppe.acito@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.6.8"
+click = "<8.0.0"
+requests = "<2.27"
+toml = "^0.10.2"
+tqdm = "4.46.0"
+
+[tool.poetry.scripts]
+Set = "set_cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

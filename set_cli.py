@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 
-import toml
+import yaml
 import click
 import os
 import requests
 import tempfile
 import shutil
-import subprocess
+import gnupg
 
 from utils import *
-from tqdm import tqdm
-from urllib.parse import urlsplit
-from typing import Tuple
-
-# config = toml.load("Set.toml")
 
 import warnings
 
@@ -33,33 +28,166 @@ class ClickRecipeObserver(RecipeObserver):
         click.echo(f"Cannot download ${click.style(url, fg='red')}")
 
 
-class Recipe:
-    """
-  Base Recipe Class, used just for reference.
-  """
-
+class Observable:
     def __init__(self):
-        self.workdir = tempfile.mkdtemp()
+        self.observers : List[RecipeObserver] = []
+    
+    def add_observer(self, observer: RecipeObserver):
+        self.observers.append(observer)
 
+    def notify(self, message):
+        for observer in self.objservers:
+            observer.notify(message)
+    
+
+def validate_dict(contents: dict, mandatory_fields: List[str], context=""):
+    for field in mandatory_fields:
+        if field not in contents:
+            raise Exception(f"Missing '{field}' ({context})")
+    
+
+def validate_recipe(recipe: dict):
+    validate_dict(recipe, ["package", "download", "build"], context = "recipe")
+        
+def validate_package(package: dict):
+    validate_dict(package, ["name", "version"], context = "package")
+    
+def validate_build(build: dict):
+    validate_dict(build, ["steps"], context="build")
+
+def validate_download(download: dict):
+    if "url" not in download and "github" not in download:
+        raise Exception("Invalid download specs, check your recipe")
+    
+
+class Package:
+    def __init__(self, package):
+        validate_package(package)
+        self.package = package
+        self.name = package["name"]
+        self.version = package["version"]
+        self.slug = f"{self.name}@{self.version}"
+        self.relative_path = f"{self.name}/{self.version}"
+
+class URLDownload:
+    def __init__(self, download: dict, workdir: str):
+        if "url" not in download:
+            raise Exception("don't know that to download here")
+        self.url = download["url"]
+        self.workdir = workdir
+        self.download = download
+        
+    def verify(self):
+        if "verify" not in self.download:
+            return
+        
+        if not hasattr(self, "filepath"):
+            raise Exception("Cannot verify something I've not downloaded")
+        
+        verified = False
+        if "sign" in self.download["verify"]:
+            sign_url = self.download["verify"]["sign"]
+            sign_path = download_file(sign_url, self.workdir)
+            gpg = gnupg.GPG()
+
+            # Carica la tua chiave pubblica (se non l'hai già importata)
+            # gpg.import_keys(open('your_public_key.asc').read())
+
+            # Verifica la firma
+            with open(sign_path, 'rb') as sig_file, open(self.filepath, 'rb') as tarball_file:
+                verified = gpg.verify_file(sig_file, tarball_file)
+
+        elif "sha512" in self.download["verify"]:
+            expected = self.download["verify"]["sha512"]
+            computed_hash = calcola_sha512(self.filepath)
+            verified = computed_hash == expected
+            
+        if not verified:
+            raise Exception("File is not verified, check your sources")
+        
+    def decompress(self):
+        """Decompress the packaged downloaded and returns the directory"""
+        if not hasattr(self, "filepath"):
+            raise Exception("Cannot verify something I've not downloaded")
+        
+        decompress_file(self.filepath, self.workdir)
+        directories = list_directories(self.workdir)
+        if len(directories) == 1:
+            return f"{self.workdir}/{directories[0]}"
+        else:
+            return self.workdir
+        
+    def __call__(self):
+        """
+        Downloads, verify and decompress the package.
+        Returns the directory decompressed
+        """
+        self.filepath = download_file(self.url, self.workdir)
+        self.verify()
+        return self.decompress()
+
+
+class GithubDownload:
+    pass
+
+
+
+class Build(Observable):
+    def __init__(self, build, install_dir):
+        validate_build(build)
+        self.build = build
+        self.install_dir = install_dir
+        if "steps" not in build:
+            raise Exception("There are no steps to execute")
+        
+        self.steps = build["steps"]
+        
+    def notify(self, message):
+        for observer in self.objservers:
+            observer.notify(message)
+            
+    def __call__(self, build_dir):
+        for step in self.steps:
+            rc = run_command(step.format(prefix=self.install_dir), cwd=build_dir)
+            if (rc != 0):
+                self.notify(f"{step} has returned non-zero value ({rc}), please check logs")
+
+
+class Recipe(Observable):
+    """
+    Recipe Class: downloads, decompress, build a recipe
+    """
+
+    def __init__(self, recipe: dict, cellar: str = cellar):
+        validate_recipe(recipe)
+        self.recipe = recipe
+        self.workdir = tempfile.mkdtemp()
+        
+        download = recipe["download"]
+        if "url" in download:
+            self.download = URLDownload(download, self.workdir)
+        if "github" in recipe["download"]:
+            self.download = GithubDownload(download, self.workdir)
+            
+        self.package = Package(recipe["package"])
+        install_dir = f"{cellar}/{self.package.relative_path}"
+        self.build = Build(recipe["build"], install_dir)
+        
+        
+    def __call__(self):
+        self.build_dir = self.download()
+        self.build(self.build_dir)
+        
     def done(self):
-        click.echo(f"Removing Workdir: {click.style(self.workdir, fg='blue')}")
         shutil.rmtree(self.workdir)
 
-    def configure():
-        pass
-
-    def build():
-        pass
-
-    def install():
-        pass
-
+    
 
 class LinkableRecipe(Recipe):
     def link(self, source: str, dest: str = root):
         """
-    Links a package installed in `source` into main root `dest`
-    """
+        Links a package installed in `source` into main root `dest`
+        """
         partial_dirs, partial_source_files = collect_files(source)
 
         files = [f"{source}/{file}" for file in partial_source_files]
@@ -97,158 +225,6 @@ class LinkableRecipe(Recipe):
             if os.path.exists(file):
                 os.remove(file)
 
-
-class MakefileRecipe(LinkableRecipe):
-    def __init__(self, recipe: dict):
-        if "package" not in recipe:
-            raise "No Package definition"
-        package = recipe["package"]
-
-        if "name" not in package:
-            raise "No Name specified"
-        if "version" not in package:
-            raise "No Version specified"
-        if "url" not in package:
-            raise "No URL specified"
-
-        self.name = package["name"]
-        self.version = package["version"]
-        self.url = package["url"]
-        self.recipe = recipe
-
-        self.workdir = tempfile.mkdtemp()
-        self.slug = f"{self.name}@{self.version}"
-        click.echo(f"Workdir: {click.style(self.workdir, fg='blue')}")
-
-    def configure(self, package_dir, root=cellar):
-        if "configure" not in self.recipe:
-            return
-
-        recipe = self.recipe["configure"]
-
-        if "dir" in recipe:
-            build_dir_name = recipe["dir"]
-            build_dir = f"{package_dir}/{build_dir_name}"
-            if os.path.exists(build_dir):
-                raise Exception("Build dir exist, change dir config in recipe")
-            os.makedirs(build_dir)
-
-        else:
-            build_dir = package_dir
-
-        if "args" in recipe:
-            args = recipe["args"]
-        else:
-            args = ""
-
-        if "cmd" in recipe:
-            command = recipe["cmd"]
-            command = f"{command} --prefix={self.install_dir(root)}"
-        else:
-            command = f"./configure --prefix={self.install_dir(root)} {args}"
-
-        run_command(command, cwd=build_dir)
-        return build_dir
-
-    def install_dir(self, root=cellar):
-        return f"{root}/{self.name}/{self.version}"
-
-    def build(self, build_dir):
-        click.echo("Package_dir: {build_dir}")
-        if "build" not in self.recipe:
-            return
-
-        recipe = self.recipe["build"]
-
-        if "args" in recipe:
-            args = recipe["args"]
-        else:
-            args = ""
-
-        command = f"make -j {args}"
-        run_command(command, cwd=build_dir)
-
-        return build_dir
-
-    def has(self, key: str) -> bool:
-        return key in self.recipe
-
-    def download(self):
-        response = requests.get(self.url, stream=True)
-        filename = os.path.basename(urlsplit(self.url).path)
-        filepath = os.path.join(self.workdir, filename)
-        if response.status_code != 200:
-            self.notify_cant_download(self.url)
-            raise
-
-        total_size = int(response.headers.get("content-length", 0))
-
-        with open(filepath, "wb") as file:
-            for chunk in tqdm(
-                response.iter_content(chunk_size=1024),
-                total=total_size // 1024,  # Calcola il totale in MB
-                unit="KB",
-                desc=click.style(self.slug, fg="blue"),
-            ):
-                if chunk:
-                    file.write(chunk)  # Scrive ogni blocco nel file
-
-        return filepath
-
-    def decompress(self, filepath):
-        decompress_file(filepath, self.workdir)
-        directories = list_directories(self.workdir)
-        if len(directories) == 1:
-            return f"{self.workdir}/{directories[0]}"
-        else:
-            return self.workdir
-
-    def install(self, build_dir, root=cellar):
-        if "install" not in self.recipe:
-            return
-
-        recipe = self.recipe["install"]
-
-        if "args" in recipe:
-            args = recipe["args"]
-        else:
-            args = ""
-
-        command = f"make -j {args}"
-        dest = self.install_dir(root=root)
-        click.echo(f"Installing {click.style(self.slug, fg='blue')} to {dest}")
-        rc = run_command(command, cwd=build_dir)
-        if rc != 0:
-            click.echo(f"build didn't return zero (rc: {rc}), check logs")
-        click.echo(f"Installed {click.style(self.slug, fg='blue')} to {dest}")
-        return dest
-
-    def __call__(self, root=root):
-        """
-    Execute the recipe:
-    - download and decompress
-    - configure the package (if needed)
-    - build the package (if needed)
-    - install the package (if needed)
-    
-    and returns the install_dir in the cellar.
-    """
-        package_dir = self.decompress(self.download())
-        build_dir = self.configure(package_dir)
-        build_dir = self.build(build_dir)
-        install_dir = self.install(build_dir)
-        self.done()
-
-        return install_dir
-
-    def uninstall(self, root=cellar):
-        shutil.rmtree(self.install_dir(root=root))
-
-    def is_installed(self, root=cellar):
-        dir = self.install_dir(root=cellar)
-        return os.path.isdir(dir) and bool(os.listdir(dir))
-
-
 @click.group()
 def cli():
     pass
@@ -269,8 +245,8 @@ def recipe_factory(package_name: str) -> Recipe:
 
         recipe_content = response.text
 
-    recipe = toml.loads(recipe_content)
-    return MakefileRecipe(recipe)
+    recipe = yaml.load(recipe_content, Loader=yaml.FullLoader)
+    return Recipe(recipe)
 
 
 @click.command()

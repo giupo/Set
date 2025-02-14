@@ -11,6 +11,8 @@ click = "<8.0.0"
 requests = "<2.27"
 toml = "^0.10.2"
 tqdm = "4.46.0"
+pyyaml = "5.3.1"
+gnupg = "^2.3.1"
 
 [tool.poetry.scripts]
 Set = "set_cli:cli"

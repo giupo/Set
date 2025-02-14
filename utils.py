@@ -8,7 +8,12 @@ import gzip
 import bz2
 import lzma
 import subprocess
+import hashlib 
 
+import requests
+
+from tqdm import tqdm
+from urllib.parse import urlsplit
 from typing import List, Tuple
 
 
@@ -35,7 +40,7 @@ def run_command(command, cwd=None):
         raise  # Rilancia l'eccezione per terminare l'esecuzione
 
 
-def decompress_file(input_file, output_dir):
+def decompress_file(input_file: str, output_dir: str):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -138,3 +143,35 @@ def collect_files(install_dir: str) -> Tuple[List[str], List[str]]:
                 contents.append(f"{dir}/{entry.name}")
 
     return (partial_dirs, contents)
+
+def download_file(url: str, dest: str):
+    """
+    Downloads a file at `url` and saves it into `dest`.
+    Returns the filepath where it has been downloaded
+    """
+    response = requests.get(url, stream=True)
+    filename = os.path.basename(urlsplit(url).path)
+    filepath = os.path.join(dest, filename)
+    if response.status_code != 200:
+        raise Exception(f"Cannot download {url}")
+
+    total_size = int(response.headers.get("content-length", 0))
+
+    with open(filepath, "wb") as file:
+        for chunk in tqdm(
+            response.iter_content(chunk_size=1024),
+            total=total_size // 1024,  # Calcola il totale in MB
+            unit="KB",
+            desc=click.style(filename, fg="blue"),
+        ):
+            if chunk:
+                file.write(chunk)  # Scrive ogni blocco nel file
+    
+    return filepath
+
+def calcola_sha512(file_path):
+    sha512 = hashlib.sha512()
+    with open(file_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            sha512.update(chunk)
+    return sha512.hexdigest()

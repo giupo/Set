@@ -13,8 +13,16 @@ toml = "^0.10.2"
 tqdm = "4.46.0"
 
 [tool.poetry.scripts]
-Set = "set_cli:main"
+Set = "set_cli:cli"
+
+[tool.poetry.group.dev.dependencies]
+black = "19.10b0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 80
+target-version = ['py36']
+indent = 2

@@ -1,0 +1,16 @@
+package:
+  name: python
+  version: 3.13.2
+  deps: 
+    - sqlite3
+    - libffi
+    - openssl
+
+download:
+  url: https://www.python.org/ftp/python/3.13.2/Python-3.13.2.tgz  
+
+build:
+  steps:
+    - ./configure --prefix={prefix} --with-pydebug --enable-optimizations --enable-loadable-sqlite-extensions --with-lto --with-ensurepip=yes LDFLAGS="-L/home/group/public/894cf/.root/lib" CPPFLAGS="-I/home/group/public/894cf/.root/include"  
+    - make -j
+    - make install

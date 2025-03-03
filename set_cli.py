@@ -69,6 +69,18 @@ class Package:
         self.slug = f"{self.name}@{self.version}"
         self.relative_path = f"{self.name}/{self.version}"
 
+    def is_installed(self) -> bool:
+        """
+        Return `TRUE` if package is installed
+        This is a dumb test on emptyness of the installed_version
+        """
+        installed_version = os.path.join(self.install_dir(), self.relative_path)
+        return os.path.exists(installed_version)
+        
+    def install_dir(self, prefix: str=cellar) -> str:
+        return f"{prefix}/{self.relative_path}"
+    
+
 class URLDownload:
     def __init__(self, download: dict, workdir: str):
         if "url" not in download:
@@ -133,10 +145,10 @@ class GithubDownload:
 
 
 class Build(Observable):
-    def __init__(self, build, install_dir):
+    def __init__(self, build, package: Package):
         validate_build(build)
         self.build = build
-        self.install_dir = install_dir
+        self.package = package
         if "steps" not in build:
             raise Exception("There are no steps to execute")
         
@@ -148,7 +160,7 @@ class Build(Observable):
             
     def __call__(self, build_dir):
         for step in self.steps:
-            rc = run_command(step.format(prefix=self.install_dir), cwd=build_dir)
+            rc = run_command(step.format(prefix=self.package.install_dir()), cwd=build_dir)
             if (rc != 0):
                 self.notify(f"{step} has returned non-zero value ({rc}), please check logs")
 
@@ -171,7 +183,7 @@ class Recipe(Observable):
             
         self.package = Package(recipe["package"])
         install_dir = f"{cellar}/{self.package.relative_path}"
-        self.build = Build(recipe["build"], install_dir)
+        self.build = Build(recipe["build"], self.package)
         
         
     def __call__(self):
@@ -181,9 +193,9 @@ class Recipe(Observable):
     def done(self):
         shutil.rmtree(self.workdir)
 
+    def is_installed(self) -> bool:
+        return self.package.is_installed()
     
-
-class LinkableRecipe(Recipe):
     def link(self, source: str, dest: str = root):
         """
         Links a package installed in `source` into main root `dest`
@@ -224,6 +236,7 @@ class LinkableRecipe(Recipe):
             click.echo(f"Removing {file}")
             if os.path.exists(file):
                 os.remove(file)
+
 
 @click.group()
 def cli():

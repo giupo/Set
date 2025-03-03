@@ -6,19 +6,21 @@ authors = ["John Doe <giuseppe.acito@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.6.8"
+python = "^3.12.1"
 click = "<8.0.0"
 requests = "<2.27"
 toml = "^0.10.2"
 tqdm = "4.46.0"
 pyyaml = "5.3.1"
-gnupg = "^2.3.1"
+python-gnupg = "^0.5.4"
+pydantic = "^2.10.6"
 
 [tool.poetry.scripts]
 Set = "set_cli:cli"
 
 [tool.poetry.group.dev.dependencies]
 black = "19.10b0"
+ipython = "^9.0.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -26,5 +28,5 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 80
-target-version = ['py36']
+target-version = ['py312']
 indent = 2

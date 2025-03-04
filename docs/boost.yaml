@@ -1,0 +1,11 @@
+package:
+  name: boost
+  version: 1.87.0
+
+download:
+  url: https://archives.boost.io/release/1.87.0/source/boost_1_87_0.tar
+
+build:
+  steps:
+    - ./bootstrap.sh --prefix={prefix}
+    - ./b2 install

@@ -1,0 +1,13 @@
+package:
+  name: openssl
+  version: 3.4.1
+
+download:
+  url: https://github.com/openssl/openssl/releases/download/openssl-3.4.1/openssl-3.4.1.tar.gz
+
+build:
+  steps:
+    - make configure
+    - ./configure --prefix={prefix}
+    - make -j
+    - make install

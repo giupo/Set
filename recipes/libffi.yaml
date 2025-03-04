@@ -1,6 +1,5 @@
 package:
   name: libffi
-  version: 3.4.5
   versions:
     - version: 3.4.5
       download: 

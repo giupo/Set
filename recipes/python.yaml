@@ -1,13 +1,13 @@
 package:
   name: python
-  version: 3.13.2
-  deps: 
-    - sqlite3
-    - libffi
-    - openssl
-
-download:
-  url: https://www.python.org/ftp/python/3.13.2/Python-3.13.2.tgz  
+  versions:
+    - version: 3.13.2
+      download:
+        url: https://www.python.org/ftp/python/3.13.2/Python-3.13.2.tgz
+      deps: 
+        - sqlite3
+        - libffi
+        - openssl
 
 build:
   steps:

@@ -7,9 +7,13 @@ from pydantic import BaseModel, HttpUrl, Field
 class Build(BaseModel):
   steps: List[str]
 
-
+class Verify(BaseModel):
+  sign: Optional[HttpUrl] = None
+  hash: Optional[str] = None
+  
 class Download(BaseModel):
   url: HttpUrl = Field(..., description="Must be a valid URL")
+  verify: Optional[Verify] = None
 
 
 class GithubDownload(Download):
@@ -20,6 +24,7 @@ class Version(BaseModel):
   version: str
   download: Download
   build: Optional[Build] = None
+  deps: Optional[List[str]] = None
   
 
 class Package(BaseModel):
@@ -41,22 +46,29 @@ def package_factory(path: str) -> Package:
   # Create a new Version object for each version
   versions = []
   for version in package_contents['versions']:   
-    download_contents = version['download'] 
+    download_contents = version['download']
+      
     if 'tag' in download_contents:
       download = GithubDownload(**download_contents)
     else:
       download = Download(**download_contents)
     
+    if 'verify' in download_contents:
+      download.verify = Verify(**download_contents['verify'])
+      
+    build = None
     if 'build' in version:
       build_contents = version['build']
       build = Build(**build_contents)
-      versions.append(
-        Version(
-          version=version['version'], 
-          download=download, 
-          build=build
-        )
+    
+    versions.append(
+      Version(
+        version=version['version'], 
+        download=download, 
+        build=build,
+        deps=version.get('deps', None)
       )
+    )
     
   # Add the package build and download information
   build = None

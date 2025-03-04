@@ -1,18 +1,11 @@
 package:
   name: git
-  version: 2.48.1
-
-download:
-  url: https://www.kernel.org/pub/software/scm/git/git-2.48.1.tar.gz
-
-  #verify:
-  #  sign: https://www.kernel.org/pub/software/scm/git/git-2.48.1.tar.sign
-    # sha512: fasdfsadfsadf
-
-  # github: gino/carlo
-  # tag:
-  # hash:
-
+  versions:
+    - version: 2.48.1
+      download:
+        url: https://www.kernel.org/pub/software/scm/git/git-2.48.1.tar.gz
+        verify:
+          sign: https://www.kernel.org/pub/software/scm/git/git-2.48.1.tar.sign
 build:
   steps:
     - make configure

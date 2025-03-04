@@ -1,0 +1,14 @@
+package:
+  name: git
+  versions:
+    - version: 2.48.1
+      download:
+        url: https://www.kernel.org/pub/software/scm/git/git-2.48.1.tar.gz
+        verify:
+          sign: https://www.kernel.org/pub/software/scm/git/git-2.48.1.tar.sign
+build:
+  steps:
+    - make configure
+    - ./configure --prefix={prefix}
+    - make -j
+    - make install
